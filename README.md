@@ -27,3 +27,16 @@ This CRNN model can be refer to https://github.com/meijieru/crnn.pytorch, the or
 In this case, I provide sample code for pyTorch2onnx conversion. User can test to download the pytorch model, copy CRNN/pytorch2onnx/convert_pytorch2onnx.py to ./crnn.pytorch. If succefully, you will get crnn.onnx model under the same path. Use the crnn.onnx model as input model for OpenVINO Model Optimizer, set options and flags as the command line in script.sh.
 
 Please pay attension, this demo actually use grayscale image with the size of 100x37 (width x height). Thus, during the model optimizer conversion, please set input shape as [1,1,37,100]. The output layer should be with the name of "234", thus during the inference, please get the result of "234" layer.
+
+## OpenVINO demo for healthcare
+
+### AI ECG with Intel OpenVINO for Atrial Fibrillation detection
+Case study use [Stanford ML group public ECG model](https://stanfordmlgroup.github.io/projects/ecg2/) with [The Physionet 2017 Challenge dataset](https://www.physionet.org/content/challenge-2017/1.0.0/) for 1D convolutional deep neural network to detect arrhythmias in arbitrary length ECG time-series.
+
+In this case, takes as input the raw ECG data (sampled at 200 Hz), highly optimized NN inference processing with Intel OpenVINO based on x86 platform. To simply demonstrate the low power patient monitor workflow:
+
+![alt text](ai-ecg-master/workloads.png)
+
++ Intel(R) Core(TM) i7-8700K CPU @ 3.7GHz
++ Ubuntu 16.04.6
++ gcc 5.4.0
