@@ -19,6 +19,7 @@ In this case, takes as input the raw ECG data (sampled at 200 Hz), highly optimi
 + Keras==2.1.6
 + matplotlib (python-tk)
 + tqdm
++ py-cpuinfo
 
 ## Setup OpneVINO env
 source /opt/intel/openvino/bin/setupvars.sh
