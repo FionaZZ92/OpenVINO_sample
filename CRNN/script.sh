@@ -16,8 +16,8 @@ else
 	
 	#setup OpenVINO environment path
 	echo -e "\n\n$(tput setaf 2)----setup OpenVINO environement path$(tput sgr 0)\n"
-	echo -e "$(tput setaf 6)[command] source /opt/intel/computer_vision_sdk_2018.5.445/bin/setupvars.sh$(tput sgr 0)\n"
-	source /opt/intel/computer_vision_sdk_2018.5.445/bin/setupvars.sh
+	echo -e "$(tput setaf 6)[command] source /opt/intel/openvino/bin/setupvars.sh$(tput sgr 0)\n"
+	source /opt/intel/openvino/bin/setupvars.sh
 	echo -e "export PYTHONPATH=${INTEL_CVSDK_DIR}/python/python$py_ver:${PYTHONPATH}"
 	export PYTHONPATH="${INTEL_CVSDK_DIR}/python/python$py_ver:${INTEL_CVSDK_DIR}/python/python$py_ver/ubuntu16:${PYTHONPATH}"
 	
