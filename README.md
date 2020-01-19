@@ -35,7 +35,7 @@ Case study use [Stanford ML group public ECG model](https://stanfordmlgroup.gith
 
 In this case, takes as input the raw ECG data (sampled at 200 Hz), highly optimized NN inference processing with Intel OpenVINO based on x86 platform. To simply demonstrate the low power patient monitor workflow:
 
-![alt text](ai-ecg-master/workloads.png)
+![alt text](./ai-ecg-master/workloads.png)
 
 + Intel(R) Core(TM) i7-8700K CPU @ 3.7GHz
 + Ubuntu 16.04.6
