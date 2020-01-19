@@ -47,38 +47,38 @@ Finally, we can check the perf and IE results by attached sample "ie_yolov3.py":
 
 `python ie_yolov3.py --input test.jpg --model ./tf_yolov3_fullx.xml -d CPU -l /opt/intel/openvino/inference_engine/lib/intel64/libcpu_extension_avx2.so`
 
-[ INFO ] Initializing plugin for CPU device...
-[ INFO ] Reading IR...
-output1: conv2d_59/BiasAdd/YoloRegion
-shape: [1, 255, 13, 13]
-output2: conv2d_67/BiasAdd/YoloRegion
-shape: [1, 255, 26, 26]
-output3: conv2d_75/BiasAdd/YoloRegion
-shape: [1, 255, 52, 52]
-[ INFO ] Loading IR to the plugin...
-image ori shape:700,347
-image shape:(1, 3, 416, 416)
-[Performance] inference time:187.72053718566895 ms
-[ INFO ] Layer conv2d_59/BiasAdd/YoloRegion parameters: 
-[ INFO ]          classes : 80
-[ INFO ]          num     : 3
-[ INFO ]          coords  : 4
-[ INFO ]          anchors : [116.0, 90.0, 156.0, 198.0, 373.0, 326.0]
-[ INFO ] Layer conv2d_67/BiasAdd/YoloRegion parameters: 
-[ INFO ]          classes : 80
-[ INFO ]          num     : 3
-[ INFO ]          coords  : 4
-[ INFO ]          anchors : [30.0, 61.0, 62.0, 45.0, 59.0, 119.0]
-[ INFO ] Layer conv2d_75/BiasAdd/YoloRegion parameters: 
-[ INFO ]          classes : 80
-[ INFO ]          num     : 3
-[ INFO ]          coords  : 4
-[ INFO ]          anchors : [10.0, 13.0, 16.0, 30.0, 33.0, 23.0]
-[ INFO ] 
-Detected boxes for batch 1:
-[ INFO ]  Class ID | Confidence | XMIN | YMIN | XMAX | YMAX | COLOR 
-[ INFO ]    dog    |   0.984503 |  167 |  106 |  361 |  308 | (200, 112, 80) 
-[ INFO ]    dog    |   0.819315 |   79 |  194 |  165 |  313 | (200, 112, 80)
+[ INFO ] Initializing plugin for CPU device... \
+[ INFO ] Reading IR... \
+output1: conv2d_59/BiasAdd/YoloRegion \
+shape: [1, 255, 13, 13] \
+output2: conv2d_67/BiasAdd/YoloRegion \
+shape: [1, 255, 26, 26] \
+output3: conv2d_75/BiasAdd/YoloRegion \
+shape: [1, 255, 52, 52] \
+[ INFO ] Loading IR to the plugin... \
+image ori shape:700,347 \
+image shape:(1, 3, 416, 416) \
+[Performance] inference time:187.72053718566895 ms \
+[ INFO ] Layer conv2d_59/BiasAdd/YoloRegion parameters: \
+[ INFO ]          classes : 80 \
+[ INFO ]          num     : 3 \
+[ INFO ]          coords  : 4 \
+[ INFO ]          anchors : [116.0, 90.0, 156.0, 198.0, 373.0, 326.0] \
+[ INFO ] Layer conv2d_67/BiasAdd/YoloRegion parameters:  \
+[ INFO ]          classes : 80 \
+[ INFO ]          num     : 3 \
+[ INFO ]          coords  : 4 \
+[ INFO ]          anchors : [30.0, 61.0, 62.0, 45.0, 59.0, 119.0] \
+[ INFO ] Layer conv2d_75/BiasAdd/YoloRegion parameters:  \
+[ INFO ]          classes : 80 \
+[ INFO ]          num     : 3 \
+[ INFO ]          coords  : 4 \
+[ INFO ]          anchors : [10.0, 13.0, 16.0, 30.0, 33.0, 23.0] \
+[ INFO ]  \
+Detected boxes for batch 1: \
+[ INFO ]  Class ID | Confidence | XMIN | YMIN | XMAX | YMAX | COLOR  \
+[ INFO ]    dog    |   0.984503 |  167 |  106 |  361 |  308 | (200, 112, 80) \
+[ INFO ]    dog    |   0.819315 |   79 |  194 |  165 |  313 | (200, 112, 80) \
 
 You can modify the threshold in sample code to get more results with boxes. Please note, above results box location is related on 416x416. 
 
