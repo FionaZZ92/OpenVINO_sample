@@ -7,25 +7,25 @@ In this case, takes as input the raw ECG data (sampled at 200 Hz), highly optimi
 ![alt text](workloads.png)
 
 + Intel(R) Core(TM) i7-8700K CPU @ 3.7GHz
-+ Ubuntu 16.04.6
-+ gcc 5.4.0
++ Ubuntu 18.04.4
++ gcc 7.5.0
++ python3.6
 
 ## Installation requirements
-+ Intel(R) OpenVINO 2019 R3
-+ Numpy==1.14.3
-+ scikit-learn
-+ scipy==1.1.0
-+ tensorflow==1.8.0
-+ Keras==2.1.6
-+ matplotlib (python-tk)
-+ tqdm
-+ py-cpuinfo
++ Intel(R) OpenVINO 2020.3
++ pip install numpy
++ pip install scikit-learn
++ pip install scipy
++ pip install matplotlib
++ pip install py-cpuinfo
++ pip install pickle
++ sudo apt install python3-tk
 
 ## Setup OpneVINO env
 source /opt/intel/openvino/bin/setupvars.sh
 
 ## Start AI-ECG demo
-python ie_ecg_eval.py -d CPU -l /opt/intel/openvino/inference_engine/lib/intel64/libcpu_extension_avx2.so
+python ie_ecg_eval.py -d CPU
 
 ## Screenshot
 ![alt text](ecg3.png)
