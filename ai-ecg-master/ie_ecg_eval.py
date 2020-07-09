@@ -1,6 +1,5 @@
 import tkinter
 import numpy as np
-import keras
 import sys
 import os
 from argparse import ArgumentParser, SUPPRESS
