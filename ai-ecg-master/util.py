@@ -1,10 +1,10 @@
 import os
-import cPickle as pickle
+import pickle
 
 def load(dirname):
     preproc_f = os.path.join(dirname, "preproc.bin")
-    with open(preproc_f, 'r') as fid:
-        preproc = pickle.load(fid)
+    with open(preproc_f, 'rb') as fid:
+        preproc = pickle.load(fid, encoding="latin1")
     return preproc
 
 def save(preproc, dirname):

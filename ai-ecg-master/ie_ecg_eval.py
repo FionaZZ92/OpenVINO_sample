@@ -1,3 +1,4 @@
+import tkinter
 import numpy as np
 import keras
 import sys
@@ -9,6 +10,8 @@ import logging as log
 import time
 from datetime import datetime
 import scipy.stats as sst
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import ecg_menu
@@ -137,7 +140,6 @@ def build_argparser():
 
     return parser
 
-
 def on_select(item):
     ax1 = fig.add_subplot(gs[2, :])
     ax2 = fig.add_subplot(gs[1, 3])
@@ -174,10 +176,10 @@ def on_select(item):
 
         #choose proper IRs
         if (input_ecg.shape[1]==8960):
-            model_xml = "tf_model_8960_fp16.xml"
+            model_xml = "ecg_8960_ir10_fp16.xml"
             model_bin = os.path.splitext(model_xml)[0] + ".bin"
         elif (input_ecg.shape[1]==17920):
-            model_xml = "tf_model_17920_fp16.xml"
+            model_xml = "ecg_17920_ir10_fp16.xml"
             model_bin = os.path.splitext(model_xml)[0] + ".bin"
         # Plugin initialization for specified device and load extensions library if specified
         log.info("OpenVINO Initializing plugin for {} device...".format(args.device))
@@ -189,8 +191,8 @@ def on_select(item):
         net = IENetwork(model=model_xml, weights=model_bin)
         assert len(net.inputs.keys()) == 1, "Demo supports only single input topologies"
 
-        if args.cpu_extension and 'CPU' in args.device:
-            ie.add_extension(args.cpu_extension, "CPU")
+        #if args.cpu_extension and 'CPU' in args.device:
+        #    ie.add_extension(args.cpu_extension, "CPU")
         config = { 'PERF_COUNT' : ('YES' if args.perf_counts else 'NO')}
         device_nstreams = parseValuePerDevice(args.device, None)
         if ('Async' in (item.labelstr)) and ('CPU' in (args.device)):
@@ -244,6 +246,7 @@ def on_select(item):
         del exec_net
         print("[Performance] each inference time:{} ms".format(det_time*1000))
         prediction = sst.mode(np.argmax(res, axis=2).squeeze())[0][0]
+        print(prediction)
         result = preproc.int_to_class[prediction]
 
         ax1.set_xlabel('File: {}, Intel OpenVINO Infer_perf for each input: {}ms, classification_result: {}'.format(item.labelstr, det_time*1000, result), fontsize=15, color="c", fontweight='bold')
@@ -278,7 +281,7 @@ if __name__ == '__main__':
 
     
     info = get_cpu_info()
-    t = "CPU info: " +info['brand'] + ", num of core(s): " +str(info['count'])
+    t = "CPU info: " +info['brand_raw'] + ", num of core(s): " +str(info['count'])
 
     t1 = ("In this Challenge, we treat all non-AF abnormal rhythms as a single "
           "class and require the Challenge entrant to classify the rhythms as:"
