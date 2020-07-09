@@ -25,7 +25,7 @@ In this case, takes as input the raw ECG data (sampled at 200 Hz), highly optimi
 source /opt/intel/openvino/bin/setupvars.sh
 
 ## Start AI-ECG demo
-python ie_ecg_eval.py -d CPU
+python ie_ecg_eval.py -d <CPU|GPU|HDDL|MYRIAD|FPGA>
 
 ## Screenshot
 ![alt text](ecg3.png)
