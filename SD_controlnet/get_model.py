@@ -1,18 +1,31 @@
 from pathlib import Path
 import torch
+import argparse
 from torch.onnx import _export as torch_onnx_export
 from openvino.tools.mo import convert_model
 from openvino.runtime import serialize
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
 
+def parse_args() -> argparse.Namespace:
+    """Parse and return command line arguments."""
+    parser = argparse.ArgumentParser(add_help=False)
+    args = parser.add_argument_group('Options')
+    # fmt: off
+    args.add_argument('-h', '--help', action = 'help',
+                      help='Show this help message and exit.')
+    args.add_argument('-b', '--batch', type = int, default = 1, required = True,
+                      help='Required. batch_size for solving single/multiple prompt->image generation.')
+    # fmt: on
+    return parser.parse_args()
 
+args = parse_args()
 ###covnert controlnet to IR
 controlnet = ControlNetModel.from_pretrained("sd-controlnet-canny", torch_dtype=torch.float32).cpu()
 inputs = {
-    "sample": torch.randn((2, 4, 64, 64)),
+    "sample": torch.randn((args.batch*2, 4, 64, 64)), 
     "timestep": torch.tensor(1),
-    "encoder_hidden_states": torch.randn((2,77,768)),
-    "controlnet_cond": torch.randn((2,3,512,512))
+    "encoder_hidden_states": torch.randn((args.batch*2,77,768)),
+    "controlnet_cond": torch.randn((args.batch*2,3,512,512)) #batch=2
 }
 '''dynamic_names = {
     "sample": {0: "batch"},
@@ -36,6 +49,7 @@ if not CONTROLNET_OV_PATH.exists():
             torch_onnx_export(controlnet, inputs, CONTROLNET_ONNX_PATH, input_names=list(inputs),
                 output_names=controlnet_output_names,onnx_shape_inference=False, #dynamic_axes=dynamic_names,
                 operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
+
     ov_ctrlnet = convert_model(CONTROLNET_ONNX_PATH, compress_to_fp16=True)
     serialize(ov_ctrlnet,CONTROLNET_OV_PATH)
     del ov_ctrlnet
@@ -85,7 +99,7 @@ TEXT_ENCODER_OV_PATH = TEXT_ENCODER_ONNX_PATH.with_suffix('.xml')
 
 def convert_encoder_onnx(text_encoder:torch.nn.Module, onnx_path:Path):
     if not onnx_path.exists():
-        input_ids = torch.ones((1, 77), dtype=torch.long)
+        input_ids = torch.ones((args.batch, 77), dtype=torch.long)
         # switch model to inference mode
         text_encoder.eval()
 
@@ -139,7 +153,7 @@ def convert_vae_decoder_onnx(vae: torch.nn.Module, onnx_path: Path):
 
     if not onnx_path.exists():
         vae_decoder = VAEDecoderWrapper(vae)
-        latents = torch.zeros((1, 4, 64, 64))
+        latents = torch.zeros((args.batch, 4, 64, 64))
 
         vae_decoder.eval()
         with torch.no_grad():

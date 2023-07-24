@@ -51,8 +51,8 @@ def preprocess(image: Image.Image):
     #image = cv2.copyMakeBorder(image, int(pad_height//2), 512-int(pad_height//2)-dst_height, int(pad_width//2), 512-int(pad_width//2)-dst_width, cv2.BORDER_CONSTANT, (0,0,0) );
     #cv2.imwrite("preprocess.png",image)
     #image = np.expand_dims(image, axis=0)
-    image = image.transpose(0, 3, 1, 2)
     image = image.astype(np.float32) / 255.0
+    image = image.transpose(0, 3, 1, 2)
     return image, pad
 
 
@@ -74,6 +74,7 @@ def randn_tensor(
     return latents
 
 
+
 class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
     """
     OpenVINO inference pipeline for Stable Diffusion with ControlNet guidence
@@ -91,7 +92,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
     ):
         super().__init__()
         self.tokenizer = tokenizer
-        self.vae_scale_factor = 8
+        self.vae_scale_factor = 8 #2 ** (len(self.vae.config.block_out_channels) - 1)
         self.scheduler = scheduler
         self.load_models(core, device, controlnet, text_encoder, unet, vae_decoder)
         self.set_progress_bar_config(disable=True)
@@ -117,6 +118,19 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         self.unet_out = self.unet.output(0)
         self.vae_decoder = core.compile_model(vae_decoder)
         self.vae_decoder_out = self.vae_decoder.output(0)
+    def prepare_image(self, image: Image, batch_size: int, num_images_per_prompt:int = 1, do_classifier_free_guidance: bool = True):
+        orig_width, orig_height = image.size
+        image, pad = preprocess(image)
+        height, width = image.shape[-2:]
+        if image.shape[0] == 1:
+            repeat_by = batch_size
+        else:
+            repeat_by = num_images_per_prompt
+        image = image.repeat(repeat_by, axis=0)
+        if do_classifier_free_guidance:
+            image = np.concatenate(([image] * 2))
+        return image, height, width, pad, orig_height, orig_width
+
 
     def __call__(
         self,
@@ -125,7 +139,9 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         num_inference_steps: int = 10,
         negative_prompt: Union[str, List[str]] = None,
         guidance_scale: float = 7.5,
-        controlnet_conditioning_scale: float = 1.0,
+        controlnet_conditioning_scale: Union[float, List[float]] = 1.0,
+        control_guidance_start: Union[float, List[float]] = [0.0], #single controlnet
+        control_guidance_end: Union[float, List[float]] = [1.0], #single controlnet
         eta: float = 0.0,
         latents: Optional[np.array] = None,
         output_type: Optional[str] = "pil",
@@ -163,6 +179,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
 
         # 1. Define call parameters
         batch_size = 1 if isinstance(prompt, str) else len(prompt)
+        #print("batch:",batch_size)
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
         # corresponds to doing no classifier free guidance.
@@ -171,11 +188,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         text_embeddings = self._encode_prompt(prompt, negative_prompt=negative_prompt)
 
         # 3. Preprocess image
-        orig_width, orig_height = image.size
-        image, pad = preprocess(image)
-        height, width = image.shape[-2:]
-        if do_classifier_free_guidance:
-            image = np.concatenate(([image] * 2))
+        image, height, width, pad, orig_height, orig_width = self.prepare_image(image, batch_size, do_classifier_free_guidance)
 
         # 4. set timesteps
         self.scheduler.set_timesteps(num_inference_steps)
@@ -192,6 +205,15 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
             latents,
         )
 
+         # 6.1 Create tensor stating which controlnets to keep
+        controlnet_keep = []
+        for i in range(len(timesteps)):
+            keeps = [
+                1.0 - float(i / len(timesteps) < s or (i + 1) / len(timesteps) > e)
+                for s, e in zip(control_guidance_start, control_guidance_end)
+            ]
+            controlnet_keep.append(keeps[0]) #keeps[0] if isinstance(controlnet, ControlNetModel) else keeps)
+
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=num_inference_steps) as progress_bar:
@@ -202,16 +224,22 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
                 latent_model_input = np.concatenate(
                     [latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                #text_embeddings = np.split(text_embeddings, 2)[1] if do_classifier_free_guidance else text_embeddings
 
-                result = self.controlnet([latent_model_input, t, text_embeddings, image])
-                down_and_mid_blok_samples = [sample * controlnet_conditioning_scale for _, sample in result.items()]
+                if isinstance(controlnet_keep[i], list):
+                    cond_scale = [c * s for c, s in zip(controlnet_conditioning_scale, controlnet_keep[i])]
+                else:
+                    cond_scale = controlnet_conditioning_scale * controlnet_keep[i]
+                
+                result = self.controlnet([latent_model_input, t, text_embeddings, image, cond_scale])
+                down_and_mid_blok_samples = [sample * cond_scale for _, sample in result.items()]
 
                 # predict the noise residual
                 noise_pred = self.unet([latent_model_input, t, text_embeddings, *down_and_mid_blok_samples])[self.unet_out]
 
                 # perform guidance
                 if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred[0], noise_pred[1]
+                    noise_pred_uncond, noise_pred_text = np.split(noise_pred,2) #noise_pred[0], noise_pred[1]
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
                 # compute the previous noisy sample x_t -> x_t-1
@@ -336,7 +364,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         Returns:
            image: decoded by VAE decoder image
         """
-        latents = 1 / 0.18215 * latents
+        latents = 1 / 0.18215 * latents # 1 / self.vae.config.scaling_factor * latents
         image = self.vae_decoder(latents)[self.vae_decoder_out]
         (_, end_h), (_, end_w) = pad[1:3]
         h, w = image.shape[2:]
@@ -359,7 +387,8 @@ UNET_OV_PATH = "unet_controlnet.xml"
 VAE_DECODER_OV_PATH = "vae_decoder.xml"
 
 core = Core()
-ov_pipe = OVContrlNetStableDiffusionPipeline(tokenizer, scheduler, core, CONTROLNET_OV_PATH, TEXT_ENCODER_OV_PATH, UNET_OV_PATH, VAE_DECODER_OV_PATH, device="AUTO") #change to CPU or GPU
+core.set_property({'CACHE_DIR': './cache'})
+ov_pipe = OVContrlNetStableDiffusionPipeline(tokenizer, scheduler, core, CONTROLNET_OV_PATH, TEXT_ENCODER_OV_PATH, UNET_OV_PATH, VAE_DECODER_OV_PATH, device="GPU.0") #change to CPU or GPU
 
 image = load_image("vermeer_512x512.png")
 image = np.array(image)
@@ -373,13 +402,17 @@ image = np.concatenate([image, image, image], axis=2)
 image = Image.fromarray(image)
 #image.save("canny.png")
 
-prompt = "Girl with Pearl Earring"
+prompt = ["Girl with Pearl Earring","Gril with blue cloth"]
+#prompt = ["Girl with Pearl Earring"]
 num_steps = 20
-negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
+negative_prompt = ["monochrome, lowres, bad anatomy, worst quality, low quality","monochrome, lowres, bad anatomy, worst quality, low quality"]
+#negative_prompt = ["monochrome, lowres, bad anatomy, worst quality, low quality"] #use single batch
 
 np.random.seed(42)
 start = time.time()
-result = ov_pipe(prompt, image, num_steps, negative_prompt)[0]
+results = ov_pipe(prompt, image, num_steps, negative_prompt)
 end = time.time()-start
 print("Inference time({}its): {} s".format(num_steps,end))
-result.save("result.png")
+
+for i in range(len(results)):
+    results[i].save("result"+str(i)+".png")
