@@ -22,8 +22,9 @@ $ wget https://huggingface.co/takuma104/controlnet_dev/blob/main/gen_compare/con
 ```
 
 ## Step 2: Convert Model to IR
+In this case, we generate static model with batch_size=2:
 ```shell
-$ python get_model.py
+$ python get_model.py -b 2
 ```
 Please check your current path, make sure you already generate below models currently. Other files can be deleted for saving space.
 + controlnet-canny.<xml|bin>
@@ -35,12 +36,12 @@ Please check your current path, make sure you already generate below models curr
 ```shell
 $ python run_pipe.py
 ```
-The E2E inference time on Arc 770 by OV 2023.0.1 is like below:
+The E2E inference time with 2 prompts(bs=2) on Arc 770 by OV 2023.0.1 is like below:
 ```shell
 ...
-Inference time(20 its): 3.68292236328125 s
+Inference time(20 its): 6.6 s
 ```
 
 Now, use below source image to generate image with similar canny.
 
-![alt text](pipe.png)
+![alt text](pipe_results.png)
