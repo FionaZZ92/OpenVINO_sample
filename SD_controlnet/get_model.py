@@ -15,12 +15,18 @@ def parse_args() -> argparse.Namespace:
                       help='Show this help message and exit.')
     args.add_argument('-b', '--batch', type = int, default = 1, required = True,
                       help='Required. batch_size for solving single/multiple prompt->image generation.')
+    args.add_argument('-sd','--sd_weights', type = str, default="", required = True,
+                      help='Specify the path of stable diffusion model')
+    args.add_argument('-lt','--lora_type', type = str, default="", required = False,
+                      help='Specify the type of lora weights, you can choose "safetensors" or "bin"')
+    args.add_argument('-lw', '--lora_weights', type = str, default="", required = False,
+                      help='Add lora weights to Stable diffusion.')
     # fmt: on
     return parser.parse_args()
 
 args = parse_args()
 ###covnert controlnet to IR
-controlnet = ControlNetModel.from_pretrained("sd-controlnet-canny", torch_dtype=torch.float32).cpu()
+controlnet = ControlNetModel.from_pretrained("sd-controlnet-canny", torch_dtype=torch.float32)
 inputs = {
     "sample": torch.randn((args.batch*2, 4, 64, 64)), 
     "timestep": torch.tensor(1),
@@ -59,7 +65,13 @@ else:
 
 
 ###convert SD-Unet model to IR
-pipe = StableDiffusionControlNetPipeline.from_pretrained("stable-diffusion-v1-5", controlnet=controlnet)
+pipe = StableDiffusionControlNetPipeline.from_pretrained(args.sd_weights, controlnet=controlnet)
+if args.lora_type == "bin":
+    pipe.unet.load_attn_procs(args.lora_weights)
+elif args.lora_type == "safetensors":
+    print("==make sure you already generate new SD model with lora by diffusers.scripts.convert_lora_safetensor_to_diffusers.py==")
+else:
+    print("==No lora==")
 UNET_ONNX_PATH = Path('unet_controlnet/unet_controlnet.onnx')
 UNET_OV_PATH = UNET_ONNX_PATH.parents[1] / 'unet_controlnet.xml'
 
@@ -82,7 +94,7 @@ if not UNET_OV_PATH.exists():
 
         with torch.no_grad():
             torch_onnx_export(unet, inputs, str(UNET_ONNX_PATH), #dynamic_axes=dynamic_names,
-                input_names=input_names, output_names=["sample_out"], onnx_shape_inference=False)
+                input_names=input_names, output_names=["sample_out"], onnx_shape_inference=False, opset_version=15)
         del unet
     del pipe.unet
     ov_unet = convert_model(UNET_ONNX_PATH, compress_to_fp16=True)
