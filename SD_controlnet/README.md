@@ -76,6 +76,6 @@ $ python run_pipe.py
 ```
 The lora weights appended SD model with controlnet pipeline can generate image like below:
 
-![alt text](pipe_lora_bin_results.png)
+![alt text](pipe_lora_safetensors_results.png)
 
 
