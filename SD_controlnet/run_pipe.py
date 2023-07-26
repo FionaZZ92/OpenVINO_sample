@@ -2,13 +2,30 @@ from PIL import Image
 from diffusers import UniPCMultistepScheduler, StableDiffusionControlNetPipeline, ControlNetModel
 import torch
 import numpy as np
+import argparse
 from typing import Union, List, Optional, Tuple
 from diffusers.utils import load_image
 from diffusers.pipeline_utils import DiffusionPipeline
 from transformers import CLIPTokenizer
-from openvino.runtime import Core, Model
+from openvino.runtime import Core, Model, Type
+from openvino.runtime.passes import Manager, GraphRewrite, MatcherPass, WrapType, Matcher
+from openvino.runtime import opset10 as ops
+from safetensors.torch import load_file
 import time
 import cv2
+
+def parse_args() -> argparse.Namespace:
+    """Parse and return command line arguments."""
+    parser = argparse.ArgumentParser(add_help=False)
+    args = parser.add_argument_group('Options')
+    # fmt: off
+    args.add_argument('-h', '--help', action = 'help',
+                      help='Show this help message and exit.')
+    args.add_argument('-lp', '--lora_path', type = str, default = "", required = False,
+                      help='Specify path of lora weights *.safetensors')
+    args.add_argument('-a','--alpha',type = float, default = 0.75, required = False,
+                      help='Specify the merging ratio of lora weights, default is 0.75.')
+    return parser.parse_args()
 
 def scale_fit_to_window(dst_width:int, dst_height:int, image_width:int, image_height:int):
     """
@@ -73,6 +90,33 @@ def randn_tensor(
 
     return latents
 
+class InsertLoRA(MatcherPass):
+    def __init__(self,lora_dict_list):
+        MatcherPass.__init__(self)
+        self.model_changed = False
+
+        param = WrapType("opset10.Convert")
+
+        def callback(matcher: Matcher) -> bool:
+            root = matcher.get_match_root()
+            root_output = matcher.get_match_value()
+            for y in lora_dict_list:
+                if root.get_friendly_name().replace('.','_').replace('_weight','') == y["name"]:
+                    consumers = root_output.get_target_inputs()
+                    lora_weights = ops.constant(y["value"],Type.f32,name=y["name"])
+                    add_lora = ops.add(root,lora_weights,auto_broadcast='numpy')
+                    for consumer in consumers:
+                        consumer.replace_source_output(add_lora.output(0))
+
+                    # For testing purpose
+                    self.model_changed = True
+                    # Use new operation for additional matching
+                    self.register_new_node(add_lora)
+
+            # Root node wasn't replaced or changed
+            return False
+
+        self.register_matcher(Matcher(param,"InsertLoRA"), callback)
 
 
 class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
@@ -88,16 +132,19 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         text_encoder: Model,
         unet: Model,
         vae_decoder: Model,
+        state_dict,
+        alpha,
         device:str = "AUTO"
     ):
         super().__init__()
         self.tokenizer = tokenizer
         self.vae_scale_factor = 8 #2 ** (len(self.vae.config.block_out_channels) - 1)
         self.scheduler = scheduler
-        self.load_models(core, device, controlnet, text_encoder, unet, vae_decoder)
+        self.load_models(core, device, controlnet, text_encoder, unet, vae_decoder, state_dict, alpha)
         self.set_progress_bar_config(disable=True)
+    
 
-    def load_models(self, core: Core, device: str, controlnet:Model, text_encoder: Model, unet: Model, vae_decoder: Model):
+    def load_models(self, core: Core, device: str, controlnet:Model, text_encoder: Model, unet: Model, vae_decoder: Model, state_dict, alpha):
         """
         Function for loading models on device using OpenVINO
         
@@ -111,10 +158,57 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         Returns
           None
         """
+        if state_dict != None:
+            ov_unet = core.read_model(unet)
+            ##===Add lora weights===
+            visited = []
+            lora_dict = {}
+            lora_dict_list = []
+            LORA_PREFIX_UNET = "lora_unet"
+            LORA_PREFIX_TEXT_ENCODER = "lora_te"
+            manager = Manager()
+            for key in state_dict:
+                if ".alpha" in key or key in visited:
+                    continue
+                if "text" in key:
+                    layer_infos = key.split(".")[0].split(LORA_PREFIX_TEXT_ENCODER + "_")[-1].split("_")
+                else:
+                    layer_infos = key.split(LORA_PREFIX_UNET + "_")[1].split('.')[0]
+                    lora_dict = dict(name=layer_infos)
+
+                pair_keys = []
+                if "lora_down" in key:
+                    pair_keys.append(key.replace("lora_down", "lora_up"))
+                    pair_keys.append(key)
+                else:
+                    pair_keys.append(key)
+                    pair_keys.append(key.replace("lora_up", "lora_down"))
+
+                    # update weight
+                if len(state_dict[pair_keys[0]].shape) == 4:
+                    weight_up = state_dict[pair_keys[0]].squeeze(3).squeeze(2).to(torch.float32)
+                    weight_down = state_dict[pair_keys[1]].squeeze(3).squeeze(2).to(torch.float32)
+                    lora_weights = alpha * torch.mm(weight_up, weight_down).unsqueeze(2).unsqueeze(3)
+                    lora_dict.update(value=lora_weights)
+                else:
+                    weight_up = state_dict[pair_keys[0]].to(torch.float32)
+                    weight_down = state_dict[pair_keys[1]].to(torch.float32)
+                    lora_weights = alpha * torch.mm(weight_up, weight_down)
+                    lora_dict.update(value=lora_weights)
+                lora_dict_list.append(lora_dict)
+                # update visited list
+                for item in pair_keys:
+                    visited.append(item)
+
+            manager.register_pass(InsertLoRA(lora_dict_list))  
+            manager.run_passes(ov_unet)
+            self.unet = core.compile_model(ov_unet, device)
+        else:
+            self.unet = core.compile_model(unet, device)
+
         self.text_encoder = core.compile_model(text_encoder, device)
         self.text_encoder_out = self.text_encoder.output(0)
         self.controlnet = core.compile_model(controlnet, device)
-        self.unet = core.compile_model(unet, device)
         self.unet_out = self.unet.output(0)
         self.vae_decoder = core.compile_model(vae_decoder)
         self.vae_decoder_out = self.vae_decoder.output(0)
@@ -375,6 +469,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         image = np.transpose(image, (0, 2, 3, 1))
         return image
 
+args = parse_args()
 controlnet = ControlNetModel.from_pretrained("sd-controlnet-canny", torch_dtype=torch.float32).cpu()
 pipe = StableDiffusionControlNetPipeline.from_pretrained("stable-diffusion-v1-5", controlnet=controlnet)
 
@@ -388,7 +483,14 @@ VAE_DECODER_OV_PATH = "vae_decoder.xml"
 
 core = Core()
 core.set_property({'CACHE_DIR': './cache'})
-ov_pipe = OVContrlNetStableDiffusionPipeline(tokenizer, scheduler, core, CONTROLNET_OV_PATH, TEXT_ENCODER_OV_PATH, UNET_OV_PATH, VAE_DECODER_OV_PATH, device="GPU.0") #change to CPU or GPU
+#====Add lora======
+LORA_PATH = args.lora_path
+# load LoRA weight from .safetensors
+if LORA_PATH == "":
+    ov_pipe = OVContrlNetStableDiffusionPipeline(tokenizer, scheduler, core, CONTROLNET_OV_PATH, TEXT_ENCODER_OV_PATH, UNET_OV_PATH, VAE_DECODER_OV_PATH, None, args.alpha, device="AUTO") #change to CPU or GPU
+else:
+    state_dict = load_file(LORA_PATH)
+    ov_pipe = OVContrlNetStableDiffusionPipeline(tokenizer, scheduler, core, CONTROLNET_OV_PATH, TEXT_ENCODER_OV_PATH, UNET_OV_PATH, VAE_DECODER_OV_PATH, state_dict, args.alpha, device="AUTO") #change to CPU or GPU
 
 image = load_image("vermeer_512x512.png")
 image = np.array(image)
