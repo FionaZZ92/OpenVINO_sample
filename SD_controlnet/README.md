@@ -76,7 +76,7 @@ $ python run_pipe.py
 ```
 The lora weights appended SD model with controlnet pipeline can generate image like below:
 
-![alt text](pipe_lora_safetensor_results.png)
+![alt text](pipe_lora_safetensors_results.png)
 
 ## Step 4-3: Enable runtime lora merging by MatcherPass
 This step introduces the method to add lora weights in runtime before unet model compiling. This method is to extract lora weights in safetensors file and find the corresponding weights in unet model and insert weights bias. The common method to add lora weights is: `W = W0 + W_bias(alpha * torch.mm(lora_up, lora_down))`, I intend to insert openvino `opset10.add(W0,W_bias)`. The original attention weights in Unet model is loaded by `Const` op, the common processing path is `Const`->`Convert`->`Matmul`->`...`, if we add the lora weights, we should insert the calculated lora weight bias as `Const`->`Convert`->`Add`->`Matmul`->`...`. In this function, we adopt openvino.runtime.passes.MathcerPass to insert `opset10.add` function. 
@@ -85,5 +85,5 @@ python run_pipe.py -lp fluffy-stable-diffusion-1.5-lora-trained-without-data/flu
 ```
 The lora weights appended SD model with controlnet pipeline can generate image like below:
 
-![alt text](pipe_lora_safetensor_results.png)
+![alt text](pipe_lora_safetensors_results.png)
 
