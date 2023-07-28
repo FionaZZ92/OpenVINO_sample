@@ -46,6 +46,8 @@ Now, use below source image to generate image with similar canny.
 
 ![alt text](pipe_results.png)
 
+## Step 4: Enable LoRA weights for Stable Diffusion + ControlNet pipeline (Choose one of below 3 methods)
+
 ## Step 4-1: Enable lora by pytorch_lora_weights.bin
 This step introduce the method to add lora weights to Stable diffusion Unet model by `pipe.unet.load_attn_procs(...)` function. You can visit https://civitai.com/tag/lora to get lora model. Let's use one lora weights on huggingface as an example:
 ```shell
@@ -67,7 +69,7 @@ This step introduce the method to add lora weights to Stable diffusion Unet mode
 $ git clone https://huggingface.co/ntc-ai/fluffy-stable-diffusion-1.5-lora-trained-without-data
 $ git clone https://github.com/huggingface/diffusers.git && cd diffusers
 $ python scripts/convert_lora_safetensor_to_diffusers.py --base_model_path ../stable-diffusion-v1-5/ --checkpoint_path ../fluffy-stable-diffusion-1.5-lora-trained-without-data/fluffySingleWordConcept_v10.safetensors --dump_path ../stable-diffusion-v1-5-fluffy-lora --alpha=1.5
-$ cd .. && rm unet_controlnet.* unet_controlnet/unet_controlnet.onnx
+$ cd .. && rm unet_controlnet.* unet_controlnet/unet_controlnet.onnx text_encoder.*
 $ python get_model.py -b 2 -sd stable-diffusion-v1-5-fluffy-lora/ -lt safetensors
 ```
 Then, run pipeline inference program to check results.
@@ -79,7 +81,15 @@ The lora weights appended SD model with controlnet pipeline can generate image l
 ![alt text](pipe_lora_safetensors_results.png)
 
 ## Step 4-3: Enable runtime lora merging by MatcherPass
-This step introduces the method to add lora weights in runtime before unet model compiling. This method is to extract lora weights in safetensors file and find the corresponding weights in unet model and insert weights bias. The common method to add lora weights is: `W = W0 + W_bias(alpha * torch.mm(lora_up, lora_down))`, I intend to insert openvino `opset10.add(W0,W_bias)`. The original attention weights in Unet model is loaded by `Const` op, the common processing path is `Const`->`Convert`->`Matmul`->`...`, if we add the lora weights, we should insert the calculated lora weight bias as `Const`->`Convert`->`Add`->`Matmul`->`...`. In this function, we adopt openvino.runtime.passes.MathcerPass to insert `opset10.add` function. 
+This step introduces the method to add lora weights in runtime before unet model compiling. This method is to extract lora weights in safetensors file and find the corresponding weights in unet model and insert weights bias. The common method to add lora weights is:
+ `W = W0 + W_bias(alpha * torch.mm(lora_up, lora_down))`.
+I intend to insert openvino `opset10.add(W0,W_bias)`. The original attention weights in Unet model is loaded by `Const` op, the common processing path is `Const`->`Convert`->`Matmul`->`...`, if we add the lora weights, we should insert the calculated lora weight bias as `Const`->`Convert`->`Add`->`Matmul`->`...`. In this function, we adopt openvino.runtime.passes.MathcerPass to insert `opset10.add` function.
+Please make sure your current unet and text_encoder model is generated from original Stable Diffusion, if you continued from Step 4-2, please do below operations firstly. If you continued from Step 3, you can skip re-generating Unet and text-encoder:
+```shell
+rm unet_controlnet.* unet_controlnet/unet_controlnet.onnx text_encoder.*
+python get_model.py -b 2 -sd stable-diffusion-v1-5/
+``` 
+Runtime add LoRA weights on original Stable Diffusion with ControlNet pipeline just with 1 step:
 ```shell
 python run_pipe.py -lp fluffy-stable-diffusion-1.5-lora-trained-without-data/fluffySingleWordConcept_v10.safetensors -a 1.5
 ```

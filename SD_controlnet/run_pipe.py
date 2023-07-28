@@ -160,6 +160,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         """
         if state_dict != None:
             ov_unet = core.read_model(unet)
+            ov_text_encoder = core.read_model(text_encoder)
             ##===Add lora weights===
             visited = []
             lora_dict = {}
@@ -171,11 +172,13 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
                 if ".alpha" in key or key in visited:
                     continue
                 if "text" in key:
-                    layer_infos = key.split(".")[0].split(LORA_PREFIX_TEXT_ENCODER + "_")[-1].split("_")
+                    layer_infos = key.split(LORA_PREFIX_TEXT_ENCODER + "_")[-1].split(".")[0]
+                    lora_dict = dict(name=layer_infos)
+                    lora_dict.update(type="text_encoder")
                 else:
                     layer_infos = key.split(LORA_PREFIX_UNET + "_")[1].split('.')[0]
                     lora_dict = dict(name=layer_infos)
-
+                    lora_dict.update(type="unet")
                 pair_keys = []
                 if "lora_down" in key:
                     pair_keys.append(key.replace("lora_down", "lora_up"))
@@ -200,13 +203,16 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
                 for item in pair_keys:
                     visited.append(item)
 
-            manager.register_pass(InsertLoRA(lora_dict_list))  
+            manager.register_pass(InsertLoRA(lora_dict_list))
+            if (True in [('type','text_encoder') in l.items() for l in lora_dict_list]):
+                manager.run_passes(ov_text_encoder)
+                self.text_encoder = core.compile_model(ov_text_encoder, device)
             manager.run_passes(ov_unet)
             self.unet = core.compile_model(ov_unet, device)
         else:
+            self.text_encoder = core.compile_model(text_encoder, device)
             self.unet = core.compile_model(unet, device)
 
-        self.text_encoder = core.compile_model(text_encoder, device)
         self.text_encoder_out = self.text_encoder.output(0)
         self.controlnet = core.compile_model(controlnet, device)
         self.unet_out = self.unet.output(0)
@@ -482,7 +488,7 @@ UNET_OV_PATH = "unet_controlnet.xml"
 VAE_DECODER_OV_PATH = "vae_decoder.xml"
 
 core = Core()
-core.set_property({'CACHE_DIR': './cache'})
+#core.set_property({'CACHE_DIR': './cache'})
 #====Add lora======
 LORA_PATH = args.lora_path
 # load LoRA weight from .safetensors
