@@ -83,7 +83,9 @@ The lora weights appended SD model with controlnet pipeline can generate image l
 ## Step 4-3: Enable runtime lora merging by MatcherPass
 This step introduces the method to add lora weights in runtime before unet model compiling. This method is to extract lora weights in safetensors file and find the corresponding weights in unet model and insert weights bias. The common method to add lora weights is:
  `W = W0 + W_bias(alpha * torch.mm(lora_up, lora_down))`.
+
 I intend to insert openvino `opset10.add(W0,W_bias)`. The original attention weights in Unet model is loaded by `Const` op, the common processing path is `Const`->`Convert`->`Matmul`->`...`, if we add the lora weights, we should insert the calculated lora weight bias as `Const`->`Convert`->`Add`->`Matmul`->`...`. In this function, we adopt openvino.runtime.passes.MathcerPass to insert `opset10.add` function.
+
 Please make sure your current unet and text_encoder model is generated from original Stable Diffusion, if you continued from Step 4-2, please do below operations firstly. If you continued from Step 3, you can skip re-generating Unet and text-encoder:
 ```shell
 rm unet_controlnet.* unet_controlnet/unet_controlnet.onnx text_encoder.*
