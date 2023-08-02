@@ -206,7 +206,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
             manager.register_pass(InsertLoRA(lora_dict_list))
             if (True in [('type','text_encoder') in l.items() for l in lora_dict_list]):
                 manager.run_passes(ov_text_encoder)
-                self.text_encoder = core.compile_model(ov_text_encoder, device)
+            self.text_encoder = core.compile_model(ov_text_encoder, device)
             manager.run_passes(ov_unet)
             self.unet = core.compile_model(ov_unet, device)
         else:
