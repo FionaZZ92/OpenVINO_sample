@@ -99,3 +99,31 @@ The lora weights appended SD model with controlnet pipeline can generate image l
 
 ![alt text](pipe_lora_safetensors_results.png)
 
+## Step 4-4: Enable multiple lora 
+There are many methods to add multiple lora weights. I list two methods here. Assume you have two LoRA weigths, LoRA A and LoRA B. You can simply follow the Step 4-3 to loop the `MatcherPass` function to insert between original Unet `Convert` layer and `Add` layer of LoRA A. It's easy to implement. However, it is not good at performance.
+
+![alt text](multi_lora1.png)
+
+Please consider about the Logic of `MatcherPass` function. This fucntion required to filter out all layer with the `Convert` type, then through the condition judgement if each `Convert` layer connected by weights `Constant` has been fine-tuned and updated in LoRA weights file. The main costs of LoRA enabling is costed by `InsertLoRA()` function, thus the main idea is to just invoke `InsertLoRA()` function once, but append multiple LoRA files' weights.
+
+![alt text](multi_lora2.png)
+
+By above method to add multiple LoRA, the cost of appending 2 or more LoRA weights almost same as adding 1 LoRA weigths. Now, let's change the Stable Diffusion with https://huggingface.co/dreamlike-art/dreamlike-anime-1.0 to generate image with styles of animation. I pick two LoRA weights for SD 1.5 from https://civitai.com/tag/lora.
+
++ soulcard: https://civitai.com/models/67927?modelVersionId=72591
++ epi_noiseoffset: https://civitai.com/models/13941/epinoiseoffset
+
+You probably need to do prompt engineering work to generate a useful prompt like below:
+
++ prompt: "1girl, cute, beautiful face, portrait, cloudy mountain, outdoors, trees, rock, river, (soul card:1.2), highly intricate details, realistic light, trending on cgsociety,neon details, ultra realistic details, global illumination, shadows, octane render, 8k, ultra sharp"
++ Negative prompt: "3d, cartoon, lowres, bad anatomy, bad hands, text, error"
++ Seed: 0
++ num_steps: 30
++ canny low_threshold: 100
+
+```shell
+$ python run_pipe.py -lp soulcard.safetensors -a 0.7 -lp2 epi_noiseoffset2.safetensors -a2 0.7
+```
+You can get a wonderful image which generate an animated girl with soulcard typical border like below:
+
+![alt text](result_soulcard_noiseoffset.png)
