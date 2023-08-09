@@ -182,7 +182,7 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
         self.text_encoder_out = self.text_encoder.output(0)
         self.controlnet = core.compile_model(controlnet, device)
         self.unet_out = self.unet.output(0)
-        self.vae_decoder = core.compile_model(vae_decoder)
+        self.vae_decoder = core.compile_model(vae_decoder, device)
         self.vae_decoder_out = self.vae_decoder.output(0)
     def prepare_image(self, image: Image, batch_size: int, num_images_per_prompt:int = 1, do_classifier_free_guidance: bool = True):
         orig_width, orig_height = image.size
@@ -390,7 +390,7 @@ UNET_OV_PATH = "unet_controlnet.xml"
 VAE_DECODER_OV_PATH = "vae_decoder.xml"
 
 core = Core()
-#core.set_property({'CACHE_DIR': './cache'})
+core.set_property({'CACHE_DIR': './cache'}) #enable SD model cache since OV2023.1
 #====Add lora======
 LORA_PATH = []
 LORA_ALPHA = []
