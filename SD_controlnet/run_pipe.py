@@ -29,6 +29,8 @@ def parse_args() -> argparse.Namespace:
                       help='Specify path of lora weights *.safetensors')
     args.add_argument('-a2','--alpha2',type = float, default = 0.75, required = False,
                       help='Specify the merging ratio of lora weights, default is 0.75.')                  
+    args.add_argument('-c','--cache',type = bool, default = False, required = False,
+                      help='Use model cache if run on GPU device, please make sure you upgrade OV to 2023.1')
     return parser.parse_args()
 
 def scale_fit_to_window(dst_width:int, dst_height:int, image_width:int, image_height:int):
@@ -390,7 +392,8 @@ UNET_OV_PATH = "unet_controlnet.xml"
 VAE_DECODER_OV_PATH = "vae_decoder.xml"
 
 core = Core()
-core.set_property({'CACHE_DIR': './cache'}) #enable SD model cache since OV2023.1
+if args.cache == True:
+    core.set_property({'CACHE_DIR': './cache'}) #enable SD model cache since OV2023.1
 #====Add lora======
 LORA_PATH = []
 LORA_ALPHA = []
@@ -429,7 +432,7 @@ prompt = ["Girl with Pearl Earring","Girl with blue cloth"]
 #prompt = ["Girl with Pearl Earring","1girl, cute, beautiful face, portrait, cloudy mountain, outdoors, trees, rock, river, (soul card:1.2), highly intricate details, realistic light, trending on cgsociety,neon details, ultra realistic details, global illumination, shadows, octane render, 8k, ultra sharp"]
 num_steps = 20
 
-negtive_prompt = ["monochrome, lowres, bad anatomy, worst quality, low quality","monochrome, lowres, bad anatomy, worst quality, low quality"]
+negative_prompt = ["monochrome, lowres, bad anatomy, worst quality, low quality","monochrome, lowres, bad anatomy, worst quality, low quality"]
 #negative_prompt = ["monochrome, lowres, bad anatomy, worst quality, low quality","3d, cartoon, lowres, bad anatomy, bad hands, text, error"]
 
 
