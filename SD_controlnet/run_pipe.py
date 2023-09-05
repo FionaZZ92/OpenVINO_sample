@@ -1,6 +1,7 @@
 from PIL import Image
-from diffusers import UniPCMultistepScheduler, EulerAncestralDiscreteScheduler, StableDiffusionControlNetPipeline, ControlNetModel
+from diffusers import UniPCMultistepScheduler, LMSDiscreteScheduler, StableDiffusionControlNetPipeline, ControlNetModel
 import torch
+import gc
 import numpy as np
 import argparse
 from typing import Union, List, Optional, Tuple
@@ -71,9 +72,12 @@ class InsertLoRA(MatcherPass):
 
         def callback(matcher: Matcher) -> bool:
             root = matcher.get_match_root()
+            if root is None:
+                return False
             root_output = matcher.get_match_value()
             for y in lora_dict_list:
-                if root.get_friendly_name().replace('.','_').replace('_weight','') == y["name"]:
+                root_name = root.get_friendly_name().replace('.','_')
+                if root_name.find(y["name"]) != -1 :
                     consumers = root_output.get_target_inputs()
                     lora_weights = ops.constant(y["value"],Type.f32,name=y["name"])
                     add_lora = ops.add(root,lora_weights,auto_broadcast='numpy')
@@ -84,9 +88,9 @@ class InsertLoRA(MatcherPass):
                     self.model_changed = True
                     # Use new operation for additional matching
                     self.register_new_node(add_lora)
+                    lora_dict_list.remove(y)
 
-            # Root node wasn't replaced or changed
-            return False
+            return True
 
         self.register_matcher(Matcher(param,"InsertLoRA"), callback)
 
@@ -384,7 +388,13 @@ pipe = StableDiffusionControlNetPipeline.from_pretrained("stable-diffusion-v1-5"
 
 tokenizer = CLIPTokenizer.from_pretrained('clip-vit-large-patch14')
 scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
-#scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
+'''scheduler = LMSDiscreteScheduler(
+    beta_start=0.00085, 
+    beta_end=0.012, 
+    beta_schedule="scaled_linear"
+)'''
+del pipe
+gc.collect()
 
 CONTROLNET_OV_PATH = "controlnet-canny.xml"
 TEXT_ENCODER_OV_PATH = "text_encoder.xml"
