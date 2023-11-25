@@ -80,7 +80,8 @@ class InsertLoRA(MatcherPass):
                 if root_name.find(y["name"]) != -1 :
                     consumers = root_output.get_target_inputs()
                     lora_weights = ops.constant(y["value"],Type.f32,name=y["name"])
-                    add_lora = ops.add(root,lora_weights,auto_broadcast='numpy')
+                    reshaped_lora_w = ops.reshape(lora_weights,root_output.get_shape(),special_zero=True)
+                    add_lora = ops.add(root,reshaped_lora_w,auto_broadcast='numpy')
                     for consumer in consumers:
                         consumer.replace_source_output(add_lora.output(0))
 
@@ -155,9 +156,9 @@ class OVContrlNetStableDiffusionPipeline(DiffusionPipeline):
 
                         # update weight
                     if len(state_dict[iter][pair_keys[0]].shape) == 4:
-                        weight_up = state_dict[iter][pair_keys[0]].squeeze(3).squeeze(2).to(torch.float32)
-                        weight_down = state_dict[iter][pair_keys[1]].squeeze(3).squeeze(2).to(torch.float32)
-                        lora_weights = alpha_list[iter] * torch.mm(weight_up, weight_down).unsqueeze(2).unsqueeze(3)
+                        weight_up = state_dict[iter][pair_keys[0]].flatten(start_dim=1).to(torch.float32)
+                        weight_down = state_dict[iter][pair_keys[1]].flatten(start_dim=1).to(torch.float32)
+                        lora_weights = alpha_list[iter] * torch.mm(weight_up, weight_down).flatten(start_dim=1)
                         lora_dict.update(value=lora_weights)
                     else:
                         weight_up = state_dict[iter][pair_keys[0]].to(torch.float32)
